@@ -34,6 +34,9 @@ iTerm2の背景色をランダムに設定します。
 **-q**, **--quiet**
 : エラーメッセージを一切表示しません。
 
+**-h**, **--help**
+: ヘルプメッセージを表示します。
+
 ## prerequisite
 任意のruby実行環境で動くと思います。
 ruby 2.6.8p205 arm64e-darwin21, ruby 3.0.3p157 arm64-darwin21, ruby 3.1.1p18 arm64-darwin21で動作確認できています。
