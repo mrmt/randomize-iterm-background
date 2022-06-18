@@ -14,10 +14,13 @@ iTerm2の背景色をランダムにセットします
 iTerm2の背景色をランダムに設定します。
 デフォルトでは濃い灰色 `#202020` に、RGB値それぞれ最大プラスマイナス8ずらした色が設定されます。
 
+![screenshot 1](https://raw.githubusercontent.com/mrmt/randomize-iterm-background/main/asset/sample1.png)
+
 ```randomize-iterm-background --background 808080 --amplitude FF0044 --animation-wait 0.1```
 
 灰色 `#808080` から、Rを最大振れ幅255 (16進数でFF), Gを振れ幅なし, Bを最大振れ幅68 (16進数で44) で振動させた背景色に、純黒から0.1秒かけて設定します。
 
+![screenshot 2](https://raw.githubusercontent.com/mrmt/randomize-iterm-background/main/asset/sample2.png)
 ## options
 **-b** RRGGBB, **--background** RRGGBB
 : 背景色のベースを16進数で指定します。デフォルトは202020です。
