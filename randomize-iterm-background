@@ -1,0 +1,118 @@
+#!/usr/bin/env ruby
+# coding: utf-8
+#
+# randomize-iterm-background
+#
+# Copyright (c) 2022 jun morimoto
+# Released under the MIT license
+# https://opensource.org/licenses/mit-license.php
+
+require 'optparse'
+
+background = '202020'
+amplitude = '101010'
+animation_wait = 0.0
+$quiet = false
+
+def decompose_hex(hex)
+  r, g, b = /^([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})$/i.match(hex).to_a.values_at(1, 2, 3)
+  return { 'r' => r.hex, 'g' => g.hex, 'b' => b.hex }
+end
+
+def compose_hex(r, g, b)
+  return format('%02x%02x%02x', r, g, b)
+end
+
+def blur(value, amp)
+  margin = rand(amp)
+  margin -= margin/2
+  value += margin
+  if value > 255 then value = 255 end
+  if value < 0 then value = 0 end
+  return value.round
+end
+
+def running_on_iterm?
+  unless defined? ENV['TERM_PROGRAM'] then
+    return false
+  end
+  unless ENV['TERM_PROGRAM'].match(/iTerm\.app/) then
+    return false
+  end
+  return true
+end
+
+def iterm2_background_color_sequence(hex)
+  return "\033]1337;SetColors=bg=#{hex}\a"
+end
+
+def divide(goal, divider)
+  array = []
+  value = 0
+  (0..divider).each do |d|
+    array.push(value.round)
+    value += goal/divider
+  end
+  return array
+end
+
+def warn(message)
+  unless $quiet then
+    STDERR.puts message
+  end
+end
+
+begin
+  op = OptionParser.new
+  op.on('-b RRGGBB', '--background RRGGBB',
+        'base background color in hexadecimal'){ |v| background = v }
+  op.on('-a RRGGBB', '--amplitude RRGGBB',
+        'randomize amplitude in hexadecimal'){ |v| amplitude = v }
+  op.on('--animation-wait SECONDS',
+        'set color with animation, try --animation-wait 0.05'){ |v| animation_wait = v.to_f }
+  op.on('-q', '--quiet',
+        'suppress error message'){ $quiet = true }
+  op.parse!(ARGV)
+
+  unless background.match(/^[0-9A-F]{6}$/i) then
+    warn("background option is not 3 octet hexadecimal: #{background}")
+    exit 1
+  end
+
+  unless amplitude.match(/^[0-9A-F]{6}$/i) then
+    warn("amplitude option is not 3 octet hexadecimal: #{amplitude}")
+    exit 2
+  end
+end
+
+unless running_on_iterm?
+  warn('works only on iTerm2')
+  exit 3
+end
+
+begin
+  back = decompose_hex(background)
+  amp = decompose_hex(amplitude)
+  srand
+  back['r'] = blur(back['r'], amp['r'])
+  back['g'] = blur(back['g'], amp['g'])
+  back['b'] = blur(back['b'], amp['b'])
+
+  if animation_wait > 0.0 then
+    divider = 10
+    grad_r = divide(back['r'], divider)
+    grad_g = divide(back['g'], divider)
+    grad_b = divide(back['b'], divider)
+    (0..divider).each do |i|
+      hex = compose_hex(grad_r[i], grad_g[i], grad_b[i])
+      STDERR.print iterm2_background_color_sequence(hex)
+      sleep animation_wait.to_f / divider
+    end
+  else
+    hex = compose_hex(back['r'], back['g'], back['b'])
+    STDERR.print iterm2_background_color_sequence(hex)
+  end
+
+end
+
+__END__
