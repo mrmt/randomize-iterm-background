@@ -33,7 +33,7 @@ def blur(value, amp)
 end
 
 def running_on_iterm?
-  unless defined? ENV['TERM_PROGRAM'] then
+  unless ENV.has_key?('TERM_PROGRAM') then
     return false
   end
   unless ENV['TERM_PROGRAM'].match(/iTerm\.app/) then
