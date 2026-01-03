@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
-# coding: utf-8
-#
+# frozen_string_literal: true
+
 # randomize-iterm-background
 #
 # Copyright (c) 2022 jun morimoto
@@ -9,110 +9,131 @@
 
 require 'optparse'
 
-background = '202020'
-amplitude = '101010'
-animation_wait = 0.0
-$quiet = false
+# Handles randomizing the iTerm2 background color
+class RandomizeItermBackground
+  DEFAULT_BACKGROUND = '202020'
+  DEFAULT_AMPLITUDE = '101010'
+  ITERM_ESCAPE_SEQUENCE = "\033]1337;SetColors=bg=%<hex>s\a"
 
-def decompose_hex(hex)
-  r, g, b = /^([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})$/i.match(hex).to_a.values_at(1, 2, 3)
-  return { 'r' => r.hex, 'g' => g.hex, 'b' => b.hex }
-end
-
-def compose_hex(r, g, b)
-  return format('%02x%02x%02x', r, g, b)
-end
-
-def blur(value, amp)
-  margin = rand(amp)
-  margin -= margin/2
-  value += margin
-  if value > 255 then value = 255 end
-  if value < 0 then value = 0 end
-  return value.round
-end
-
-def running_on_iterm?
-  unless ENV.has_key?('TERM_PROGRAM') then
-    return false
-  end
-  unless ENV['TERM_PROGRAM'].match(/iTerm\.app/) then
-    return false
-  end
-  return true
-end
-
-def iterm2_background_color_sequence(hex)
-  return "\033]1337;SetColors=bg=#{hex}\a"
-end
-
-def divide(goal, divider)
-  array = []
-  value = 0
-  (0..divider).each do |d|
-    array.push(value.round)
-    value += goal/divider
-  end
-  return array
-end
-
-def warn(message)
-  unless $quiet then
-    STDERR.puts message
-  end
-end
-
-begin
-  op = OptionParser.new
-  op.on('-b RRGGBB', '--background RRGGBB',
-        'base background color in hexadecimal'){ |v| background = v }
-  op.on('-a RRGGBB', '--amplitude RRGGBB',
-        'randomize amplitude in hexadecimal'){ |v| amplitude = v }
-  op.on('--animation-wait SECONDS',
-        'set color with animation, try --animation-wait 0.05'){ |v| animation_wait = v.to_f }
-  op.on('-q', '--quiet',
-        'suppress error message'){ $quiet = true }
-  op.parse!(ARGV)
-
-  unless background.match(/^[0-9A-F]{6}$/i) then
-    warn("background option is not 3 octet hexadecimal: #{background}")
-    exit 1
+  def initialize(argv)
+    @argv = argv
+    @options = {
+      background: DEFAULT_BACKGROUND,
+      amplitude: DEFAULT_AMPLITUDE,
+      animation_wait: 0.0,
+      quiet: false
+    }
   end
 
-  unless amplitude.match(/^[0-9A-F]{6}$/i) then
-    warn("amplitude option is not 3 octet hexadecimal: #{amplitude}")
-    exit 2
+  def run
+    parse_options!
+    validate_environment!
+
+    target_color = generate_random_color
+    apply_color(target_color)
   end
-end
 
-unless running_on_iterm?
-  warn('works only on iTerm2')
-  exit 3
-end
+  private
 
-begin
-  back = decompose_hex(background)
-  amp = decompose_hex(amplitude)
-  srand
-  back['r'] = blur(back['r'], amp['r'])
-  back['g'] = blur(back['g'], amp['g'])
-  back['b'] = blur(back['b'], amp['b'])
+  def parse_options!
+    OptionParser.new do |op|
+      op.on('-b RRGGBB', '--background RRGGBB', 'base background color in hexadecimal') { |v| @options[:background] = v }
+      op.on('-a RRGGBB', '--amplitude RRGGBB', 'randomize amplitude in hexadecimal') { |v| @options[:amplitude] = v }
+      op.on('--animation-wait SECONDS', 'set color with animation, try --animation-wait 0.05') { |v| @options[:animation_wait] = v.to_f }
+      op.on('-q', '--quiet', 'suppress error message') { @options[:quiet] = true }
+    end.parse!(@argv)
 
-  if animation_wait > 0.0 then
-    divider = 10
-    grad_r = divide(back['r'], divider)
-    grad_g = divide(back['g'], divider)
-    grad_b = divide(back['b'], divider)
-    (0..divider).each do |i|
-      hex = compose_hex(grad_r[i], grad_g[i], grad_b[i])
-      STDERR.print iterm2_background_color_sequence(hex)
-      sleep animation_wait.to_f / divider
+    validate_hex_option!(@options[:background], 'background', 1)
+    validate_hex_option!(@options[:amplitude], 'amplitude', 2)
+  end
+
+  def validate_hex_option!(value, name, exit_code)
+    return if value&.match?(/^[0-9A-F]{6}$/i)
+
+    warn_message("#{name} option is not 3 octet hexadecimal: #{value}")
+    exit exit_code
+  end
+
+  def validate_environment!
+    return if running_on_iterm?
+
+    warn_message('works only on iTerm2')
+    exit 3
+  end
+
+  def running_on_iterm?
+    ENV['TERM_PROGRAM']&.match?(/iTerm\.app/)
+  end
+
+  def generate_random_color
+    bg = decompose_hex(@options[:background])
+    amp = decompose_hex(@options[:amplitude])
+
+    {
+      r: blur(bg[:r], amp[:r]),
+      g: blur(bg[:g], amp[:g]),
+      b: blur(bg[:b], amp[:b])
+    }
+  end
+
+  def blur(value, amp)
+    margin = rand(amp)
+    margin -= margin / 2
+    value += margin
+    value.clamp(0, 255)
+  end
+
+  def apply_color(color)
+    if @options[:animation_wait] > 0.0
+      animate_color(color)
+    else
+      set_terminal_color(color)
     end
-  else
-    hex = compose_hex(back['r'], back['g'], back['b'])
-    STDERR.print iterm2_background_color_sequence(hex)
   end
 
+  def animate_color(target_color)
+    steps = 10
+    # Generates a gradient from 0 (black) to target, preserving original "fade-in" behavior
+    r_steps = generate_steps(target_color[:r], steps)
+    g_steps = generate_steps(target_color[:g], steps)
+    b_steps = generate_steps(target_color[:b], steps)
+
+    (0..steps).each do |i|
+      hex = compose_hex(r_steps[i], g_steps[i], b_steps[i])
+      print_sequence(hex)
+      sleep @options[:animation_wait] / steps
+    end
+  end
+
+  def set_terminal_color(color)
+    hex = compose_hex(color[:r], color[:g], color[:b])
+    print_sequence(hex)
+  end
+
+  def print_sequence(hex)
+    STDERR.print format(ITERM_ESCAPE_SEQUENCE, hex: hex)
+  end
+
+  def generate_steps(target, steps)
+    (0..steps).map do |step|
+      (target * (step.to_f / steps)).round
+    end
+  end
+
+  def decompose_hex(hex)
+    r, g, b = hex.scan(/../).map(&:hex)
+    { r: r, g: g, b: b }
+  end
+
+  def compose_hex(r, g, b)
+    format('%02x%02x%02x', r, g, b)
+  end
+
+  def warn_message(message)
+    STDERR.puts message unless @options[:quiet]
+  end
 end
 
-__END__
+if __FILE__ == $0
+  RandomizeItermBackground.new(ARGV).run
+end
